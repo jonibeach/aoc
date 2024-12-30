@@ -1,6 +1,4 @@
 [package]
-name = "d13p1"
+name = "y2024d13p1"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]

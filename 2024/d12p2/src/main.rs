@@ -1,46 +1,68 @@
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 const INPUT: &'static str = include_str!("../../../input.txt");
 
-fn neighbours(grid: &Vec<Vec<char>>, curr: (usize, usize)) -> Vec<(usize, usize)> {
-    let mut res = Vec::new();
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+enum Edge {
+    Up,
+    Down,
+    Right,
+    Left,
+}
 
-    if curr.0 > 0 {
-        res.push((curr.0 - 1, curr.1));
-    }
+fn neighbours(grid: &Vec<Vec<char>>, curr: (usize, usize)) -> Vec<(Edge, Option<(usize, usize)>)> {
+    let up_neigh = if curr.0 > 0 {
+        Some((curr.0 - 1, curr.1))
+    } else {
+        None
+    };
 
-    if curr.0 < grid.len() - 1 {
-        res.push((curr.0 + 1, curr.1))
-    }
+    let down_neigh = if curr.0 < grid.len() - 1 {
+        Some((curr.0 + 1, curr.1))
+    } else {
+        None
+    };
 
-    if curr.1 > 0 {
-        res.push((curr.0, curr.1 - 1))
-    }
+    let left_neigh = if curr.1 > 0 {
+        Some((curr.0, curr.1 - 1))
+    } else {
+        None
+    };
 
-    if curr.1 < grid[0].len() - 1 {
-        res.push((curr.0, curr.1 + 1))
-    }
+    let right_neigh = if curr.1 < grid[0].len() - 1 {
+        Some((curr.0, curr.1 + 1))
+    } else {
+        None
+    };
 
-    res
+    vec![
+        (Edge::Up, up_neigh),
+        (Edge::Down, down_neigh),
+        (Edge::Left, left_neigh),
+        (Edge::Right, right_neigh),
+    ]
 }
 
 fn map_grid(
     grid: &Vec<Vec<char>>,
     curr: (usize, usize),
     checked: &mut Vec<Vec<bool>>,
-    // Stores the rows and width of each row.
-    row_widths: &mut BTreeMap<usize, usize>,
+    edges: &mut BTreeSet<((usize, usize), Edge)>,
     area: &mut usize,
 ) {
     if !checked[curr.0][curr.1] {
-        *row_widths.entry(curr.0).or_insert(0) += 1;
         *area += 1;
         checked[curr.0][curr.1] = true;
 
-        for (row, col) in neighbours(&grid, curr) {
-            if grid[row][col] == grid[curr.0][curr.1] {
-                map_grid(grid, (row, col), checked, row_widths, area);
+        for (edge, neigh) in neighbours(&grid, curr) {
+            if let Some((row, col)) = neigh {
+                if grid[row][col] == grid[curr.0][curr.1] {
+                    map_grid(grid, (row, col), checked, edges, area);
+                    continue;
+                }
             }
+
+            edges.insert((curr, edge));
         }
     }
 }
@@ -51,36 +73,53 @@ fn main() {
         .iter()
         .map(|l| l.iter().map(|_| false).collect())
         .collect();
-
-    let mut areas = Vec::new();
+    let mut all_edges = Vec::new();
 
     for (row, r) in grid.iter().enumerate() {
         for (col, _) in r.iter().enumerate() {
-            let mut row_widths = BTreeMap::new();
             let mut area = 0;
-            map_grid(&grid, (row, col), &mut checked, &mut row_widths, &mut area);
-            if row_widths.len() > 0 {
-                areas.push((area, row_widths));
+            let mut edges = BTreeSet::new();
+            map_grid(&grid, (row, col), &mut checked, &mut edges, &mut area);
+            if edges.len() > 0 {
+                all_edges.push((area, edges));
             }
         }
     }
 
     let mut res = 0;
 
-    for (total_area, rows) in areas {
-        let mut prev_width = None;
-        let mut sides = 0;
-        for (_row, width) in rows {
-            if let Some(prev) = prev_width {
-                if prev != width {
-                    sides += 2;
+    let (width, height) = (grid[0].len(), grid.len());
+
+    for (area, edges) in all_edges {
+        let mut edge_count = 0;
+        let mut handled = BTreeSet::new();
+
+        for edge in &edges {
+            if !handled.contains(edge) {
+                let (coords, dir) = edge;
+                let (mut row, mut col) = coords;
+
+                let incr = |row: &mut usize, col: &mut usize| {
+                    match dir {
+                        Edge::Down | Edge::Up => *col += 1,
+                        Edge::Left | Edge::Right => *row += 1,
+                    };
+                    *col >= width || *row >= height
+                };
+
+                if !incr(&mut row, &mut col) {
+                    while let Some(e) = edges.get(&((row, col), *dir)) {
+                        handled.insert(e);
+                        if incr(&mut row, &mut col) {
+                            break;
+                        }
+                    }
                 }
-            } else {
-                sides += 4;
+
+                edge_count += 1;
             }
-            prev_width = Some(width)
         }
-        res += total_area * sides
+        res += area * edge_count;
     }
 
     println!("{res}");
